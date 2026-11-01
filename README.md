@@ -49,6 +49,8 @@ The widget only gives guidance and is not a substitute for professional nutritio
 
 ### 1. The shortcut "Kcal Deficit"
 
+https://www.icloud.com/shortcuts/0f9098fc2b584019b69dd829c344f55a
+
 This shortcut queries Apple Health, calculates the 7-day averages and saves them as `kcal.json`.
 It needs no AI and runs in a few seconds.
 
