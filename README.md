@@ -4,6 +4,12 @@ A home screen widget that shows **7-day averages** from Apple Health:
 calorie expenditure, calorie intake, deficit or surplus, and macronutrients
 with a color-coded rating for the goal *lose fat, build muscle*.
 
+<p align="center">
+  <img src="docs/widget-medium.png" alt="Medium widget showing a 7-day calorie surplus and rated macros" width="480">
+  <br>
+  <sub>Medium widget with the German interface (<code>LANGUAGE = "de"</code>)</sub>
+</p>
+
 Scriptable cannot access Apple Health. So an **Apple Shortcut** reads the data
 and saves it as `kcal.json`, and the **Scriptable script** reads that file and draws the widget.
 
