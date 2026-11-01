@@ -140,6 +140,7 @@ Because only completed days are counted, the values change at most once a day, o
 
 ## Optional: logging meals with AI ("Nutrition Tracking" shortcut)
 
+https://www.icloud.com/shortcuts/f81df3171f2c4cdea531167ceca31fb6
 This is the shortcut I use to log meals. You describe a meal in a few words or take a photo of it,
 an AI model estimates calories and macros, and the shortcut saves them to Apple Health.
 At the end it runs "Kcal Deficit", so the widget data stays up to date.
