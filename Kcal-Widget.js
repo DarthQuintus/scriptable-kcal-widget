@@ -2,25 +2,32 @@
 // https://github.com/DarthQuintus/scriptable-kcal-widget
 //
 // Shows the 7-day averages of calorie expenditure, calorie intake,
-// deficit/surplus and macronutrients from Apple Health.
+// deficit/surplus and macronutrients from Apple Health, plus today's totals
+// (intake and macros) in gray.
 //
 // Scriptable cannot access Apple Health, so an Apple Shortcut reads the data
 // and saves it as "kcal.json" in iCloud Drive/Scriptable. This script reads
 // that file and draws the widget.
 //
 // Expected keys in kcal.json (German keys are accepted as well):
-//   Expenditure (Bedarf), Active (Aktiv), Intake (Aufnahme),
-//   Protein, Fat (Fett), Carbs (Kohlenhydrate), Weight (Gewicht)
+//   7-day averages: Expenditure (Bedarf), Active (Aktiv), Intake (Aufnahme),
+//                   Protein, Fat (Fett), Carbs (Kohlenhydrate), Weight (Gewicht)
+//   today's totals (optional): TodayIntake (HeuteAufnahme), TodayProtein (HeuteProtein),
+//                   TodayFat (HeuteFett), TodayCarbs (HeuteKohlenhydrate)
 //
-// Tapping the widget opens Scriptable, runs the shortcut, waits until it has
-// finished, reads the new data and requests a widget update.
+// Today's totals are only shown if the file contains them. If the file was not
+// written today (e.g. after midnight), they are shown as 0.
+//
+// The widget only reads the file – it never runs the shortcut. Run the shortcut
+// after logging food (and e.g. via a daily automation shortly after midnight),
+// ideally only on the device that logs the data. Tapping the widget opens
+// Scriptable and downloads the latest file from iCloud.
 //
 // MIT License – Copyright (c) 2026 Anton Angierski
 
 // ---------- Settings ----------
 const LANGUAGE = "en";            // "en" or "de"
 const FILE = "kcal.json";         // file name in iCloud Drive/Scriptable
-const SHORTCUT = "Kcal Deficit";  // name of the shortcut started on tap
 const STALE_HOURS = 26;           // data older than this is marked orange
 const REFRESH_MIN = 15;           // requested widget update interval (iOS decides in the end)
 
@@ -48,6 +55,7 @@ const LEVELS_FAT = [
   [40, "yellow"], [45, "orange"], [Infinity, "red"],
 ];
 // Carbs: not rated (they fill the remaining calories) → gray
+// Today's totals: not rated (a day in progress would almost always look "too low") → gray
 
 // ---------- Texts ----------
 const TEXTS = {
@@ -63,8 +71,7 @@ const TEXTS = {
     expenditure: "Expenditure",
     active: "thereof active",
     intake: "Intake",
-    intakeShort: "In",
-    expenditureShort: "Out",
+    today: "today",
     carbs: "C",
     target: "Target",
     noData: "Kcal: no data",
@@ -83,8 +90,7 @@ const TEXTS = {
     expenditure: "Energiebedarf",
     active: "davon aktiv",
     intake: "Aufnahme",
-    intakeShort: "Auf.",
-    expenditureShort: "Bed.",
+    today: "heute",
     carbs: "KH",
     target: "Ziel",
     noData: "Kcal: keine Daten",
@@ -107,20 +113,9 @@ const C = {
   green: new Color("#30d158"),
 };
 
-// ---------- Refresh on tap ----------
-// The widget opens scriptable:///run/<script>?refresh=1
-const qp = (args && args.queryParameters) || {};
-if (!config.runsInWidget && qp.refresh) {
-  try {
-    const cb = new CallbackURL("shortcuts://x-callback-url/run-shortcut");
-    cb.addParameter("name", SHORTCUT);
-    await cb.open(); // waits until the shortcut has finished
-  } catch (e) {
-    console.log("Shortcut error: " + e);
-  }
-}
-
 // ---------- Load data ----------
+// In the app (e.g. after tapping the widget) the file is fetched from iCloud;
+// in the widget, iOS only gives a few seconds, so the local copy may be older.
 const fm = FileManager.iCloud();
 const path = fm.joinPath(fm.documentsDirectory(), FILE);
 let data = null, updatedAt = null, error = null;
@@ -162,6 +157,22 @@ const d = {
 // Deficit = expenditure − intake (positive = deficit, negative = surplus)
 if (d.expenditure != null && d.intake != null) {
   d.deficit = d.expenditure - d.intake;
+}
+
+// ---------- Today's totals ----------
+const TODAY_KEYS = {
+  intake: ["TodayIntake", "HeuteAufnahme"],
+  protein: ["TodayProtein", "HeuteProtein"],
+  fat: ["TodayFat", "HeuteFett"],
+  carbs: ["TodayCarbs", "HeuteKohlenhydrate"],
+};
+// Only shown if the shortcut provides them at all
+const hasToday = !!data && Object.values(TODAY_KEYS).flat().some((k) => k in data);
+// File from an earlier day (e.g. after midnight) → nothing eaten yet today → 0
+const fileIsFromToday = !!updatedAt && updatedAt.toDateString() === new Date().toDateString();
+const today = {};
+for (const [k, keys] of Object.entries(TODAY_KEYS)) {
+  today[k] = !hasToday ? null : fileIsFromToday ? (num(...keys) ?? 0) : 0;
 }
 
 // ---------- Rate macros ----------
@@ -240,25 +251,40 @@ function header(w, small, big) {
     txt(h, updatedText, Font.systemFont(big ? 12 : 11), isStale ? C.orange : C.sub);
   }
 }
-// Macros: protein left, fat center, carbs right – grams plus colored rating
+// Macros: protein left, fat center, carbs right – grams plus colored rating.
+// With today's totals, a gray second line shows today's grams directly below
+// the average grams (no label, no rating).
 function macros(stack, big) {
   const m = stack.addStack();
   m.bottomAlignContent();
+  const todayFont = Font.semiboldRoundedSystemFont(big ? 14 : 12);
+
+  // One column per part. Label and rating columns get an invisible second line
+  // of the same height, so all first lines stay on one baseline.
+  function col(cell, s, font, color, below) {
+    const c = cell.addStack();
+    c.layoutVertically();
+    txt(c, s, font, color);
+    if (hasToday) {
+      txt(c, below ?? "0", todayFont, below == null ? Color.clear() : C.sub);
+    }
+  }
+
   const items = [
-    ["P", d.protein, info.protein],
-    ["F", d.fat, info.fat],
-    [T.carbs, d.carbs, info.carbs],
+    ["P", d.protein, info.protein, today.protein],
+    ["F", d.fat, info.fat, today.fat],
+    [T.carbs, d.carbs, info.carbs, today.carbs],
   ];
-  items.forEach(([label, g, p], i) => {
+  items.forEach(([label, g, p, t], i) => {
     if (i > 0) m.addSpacer();
     const cell = m.addStack();
     cell.bottomAlignContent();
-    txt(cell, label, Font.mediumSystemFont(big ? 14 : 12), C.sub);
+    col(cell, label, Font.mediumSystemFont(big ? 14 : 12), C.sub, null);
     cell.addSpacer(3);
-    txt(cell, `${fmt(g)} g`, Font.boldRoundedSystemFont(big ? 20 : 17), C.text);
+    col(cell, `${fmt(g)} g`, Font.boldRoundedSystemFont(big ? 20 : 17), C.text, `${fmt(t)} g`);
     if (p != null) {
       cell.addSpacer(4);
-      txt(cell, p.text, Font.semiboldRoundedSystemFont(big ? 15 : 13), p.color);
+      col(cell, p.text, Font.semiboldRoundedSystemFont(big ? 15 : 13), p.color, null);
     }
   });
 }
@@ -267,7 +293,8 @@ function macros(stack, big) {
 const family = config.widgetFamily || "medium";
 const big = family === "large";
 const w = new ListWidget();
-w.url = `scriptable:///run/${encodeURIComponent(Script.name())}?refresh=1`;
+// Tap: open Scriptable and run this script there (downloads the latest file)
+w.url = `scriptable:///run/${encodeURIComponent(Script.name())}`;
 w.refreshAfterDate = new Date(Date.now() + REFRESH_MIN * 60 * 1000);
 
 if (family === "accessoryRectangular" || family === "accessoryInline") {
@@ -283,7 +310,9 @@ if (family === "accessoryRectangular" || family === "accessoryInline") {
   }
 } else {
   w.backgroundColor = C.bg;
-  w.setPadding(12, 14, 12, 14);
+  // a little less vertical padding in the medium widget to fit today's lines
+  if (family === "medium" && hasToday) w.setPadding(10, 14, 10, 14);
+  else w.setPadding(12, 14, 12, 14);
 
   if (error) {
     header(w, family === "small", big);
@@ -291,13 +320,11 @@ if (family === "accessoryRectangular" || family === "accessoryInline") {
     txt(w, error, Font.systemFont(13), C.orange, 4);
     w.addSpacer();
   } else if (family === "small") {
-    header(w, true, false);
+    // small: only the big deficit/surplus number
     w.addSpacer();
     txt(w, defValue, Font.boldRoundedSystemFont(44), defColor);
-    txt(w, "kcal " + defLabel, Font.systemFont(12), C.sub);
+    txt(w, "kcal · " + defLabel, Font.systemFont(12), C.sub);
     w.addSpacer();
-    txt(w, `${T.intakeShort} ${fmt(d.intake)} · ${T.expenditureShort} ${fmt(d.expenditure)}`, Font.systemFont(11), C.sub);
-    txt(w, updatedText, Font.systemFont(10), isStale ? C.orange : C.sub);
   } else {
     // medium & large
     header(w, false, big);
@@ -314,13 +341,21 @@ if (family === "accessoryRectangular" || family === "accessoryInline") {
     main.addSpacer(18);
 
     // right column fills the space up to the right edge
+    const gap = big || !hasToday ? 4 : 2;
     const right = main.addStack();
     right.layoutVertically();
     row(right, T.expenditure, fmt(d.expenditure), "kcal", big);
-    right.addSpacer(4);
+    right.addSpacer(gap);
     row(right, T.active, fmt(d.active), "kcal", big);
-    right.addSpacer(4);
+    right.addSpacer(gap);
     row(right, T.intake, fmt(d.intake), "kcal", big);
+    if (hasToday) {
+      // today's intake, right-aligned below the average intake
+      right.addSpacer(1);
+      const r = right.addStack();
+      r.addSpacer();
+      txt(r, `${T.today} ${fmt(today.intake)} kcal`, Font.systemFont(big ? 13 : 11), C.sub);
+    }
 
     w.addSpacer();
     macros(w, big);
