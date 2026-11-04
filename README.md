@@ -2,13 +2,13 @@
 
 A home screen widget that shows **7-day averages** from Apple Health:
 calorie expenditure, calorie intake, deficit or surplus, and macronutrients
-with a color-coded rating for the goal *lose fat, build muscle*.
+with a color-coded rating and a small color scale for the goal *lose fat, build muscle*.
 Optionally it also shows **today's totals** (intake and macros) in gray.
 
 <p align="center">
-  <img src="docs/widget-medium.png" alt="Medium widget showing a 7-day calorie surplus and rated macros" width="480">
+  <img src="docs/widget-medium.png" alt="Medium widget showing a 7-day calorie surplus, rated macros with color scales and today's totals" width="480">
   <br>
-  <sub>Medium widget with the German interface (<code>LANGUAGE = "de"</code>)</sub>
+  <sub>Medium widget (example values)</sub>
 </p>
 
 Scriptable cannot access Apple Health. So an **Apple Shortcut** reads the data
@@ -21,30 +21,34 @@ Apple Health ──▶ Shortcut ──▶ iCloud Drive/Scriptable/kcal.json ─�
 ## What the widget shows
 
 - **Average deficit or surplus per day** (expenditure − intake): green for a deficit, orange for a surplus
-- **Expenditure** (resting + active energy), thereof active, and **intake**
-- **Macros**: protein (P), fat (F) and carbs (C) in grams, each with a rating
+- **Expenditure** (resting + active energy), thereof active, and **intake** (all in kcal)
+- **Macros**: protein (P), fat (F) and carbs (C) in grams. Protein and fat are rated in g per kg body weight, each with a color scale and a marker for a quick read. Carbs are not rated.
 - **Today** (optional): today's intake below the average intake, and today's grams below each macro, in gray and without a rating (a day in progress would almost always look "too low"). After midnight they show 0 until the shortcut runs again.
 - **Updated**: time of the last update (orange if older than 26 hours)
 
-The small widget shows only the deficit or surplus. The large widget adds target ranges for protein and fat.
+The small widget shows only the deficit or surplus. The large widget adds target ranges for protein (in grams) and fat (in g/kg).
 Supported sizes: small, medium, large, plus lock screen (rectangular and inline).
 The interface is available in English and German (`LANGUAGE` setting).
 
 ## Macro rating
 
-| Color | Protein (g per kg body weight) | Fat (% of calories eaten) |
-|---|---|---|
-| dark green | ≥ 2.0 | 20–30 % |
-| light green | 1.6–2.0 | 30–35 % |
-| yellow | 1.2–1.6 | 35–40 % |
-| orange | 0.8–1.2 | 15–20 % or 40–45 % |
-| red | < 0.8 | < 15 % or ≥ 45 % |
+Both in g per kg body weight:
 
-Carbs are shown as a share of calories in gray. They fill the remaining calories and have no fixed target.
+| Color | Protein | Fat |
+|---|---|---|
+| dark green | ≥ 2.0 | 0.8–1.2 |
+| light green | 1.6–2.0 | – |
+| yellow | 1.2–1.6 | 0.6–0.8 or 1.2–1.4 |
+| orange | 0.8–1.2 | 0.5–0.6 or 1.4–1.6 |
+| red | < 0.8 | < 0.5 or ≥ 1.6 |
+
+The color scales cover 0.4–2.4 g/kg (protein, red → green) and 0.2–1.8 g/kg (fat, red → green → red). Values outside the range put the marker at the edge.
+
+Carbs are not rated. They fill the remaining calories and have no fixed target.
 
 Background:
 - Protein: above roughly 1.6 g/kg, more protein adds little extra muscle gain during resistance training ([Morton et al. 2018](https://pubmed.ncbi.nlm.nih.gov/28698222/)). In a calorie deficit, higher amounts can help preserve muscle ([ISSN Position Stand 2017](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5477153/)). So there is no penalty at the top end.
-- Fat: the reference range is 20–35 % of energy ([AMDR](https://pressbooks.umn.edu/sleepeatandexercise/?p=279)). The lower part is preferred, leaving more calories for protein and carbs.
+- Fat: a minimum of roughly 0.5–0.6 g/kg supports hormone production and the uptake of fat-soluble vitamins. There is no fixed upper limit per kg – too much fat mainly crowds out protein and carbs, so the upper levels are a rule of thumb (with typical intakes, 0.8–1.2 g/kg is in line with the reference range of 20–35 % of energy, [AMDR](https://pressbooks.umn.edu/sleepeatandexercise/?p=279)). Fat is rated per kg instead of as a share of calories, because the share shifts with total intake even when the amount of fat stays the same.
 
 The widget only gives guidance and is not a substitute for professional nutrition advice.
 
@@ -199,8 +203,9 @@ Tips:
 | `STALE_HOURS` | `26` | data older than this is marked orange |
 | `REFRESH_MIN` | `15` | requested update interval in minutes |
 | `WEIGHT_KG` | `null` | fallback weight if the shortcut does not provide one |
-| `TARGET_WEIGHT_KG` | `null` | base protein on the target weight (useful with significant overweight) |
+| `TARGET_WEIGHT_KG` | `null` | base protein and fat on the target weight (useful with significant overweight) |
 | `LEVELS_PROTEIN`, `LEVELS_FAT` | see above | limits of the color levels |
+| `SCALE_PROTEIN`, `SCALE_FAT` | see above | range of the color scales |
 
 ## Notes and limitations
 
