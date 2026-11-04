@@ -3,7 +3,8 @@
 //
 // Shows the 7-day averages of calorie expenditure, calorie intake,
 // deficit/surplus and macronutrients from Apple Health, plus today's totals
-// (intake and macros) in gray.
+// (intake and macros) in gray. Protein and fat are rated in g per kg body
+// weight, each with a small color scale and a marker.
 //
 // Scriptable cannot access Apple Health, so an Apple Shortcut reads the data
 // and saves it as "kcal.json" in iCloud Drive/Scriptable. This script reads
@@ -33,7 +34,7 @@ const REFRESH_MIN = 15;           // requested widget update interval (iOS decid
 
 // ---------- Body weight ----------
 const WEIGHT_KG = null;           // fallback if the shortcut does not provide a weight, e.g. 80
-const TARGET_WEIGHT_KG = null;    // optional: base protein on target weight (useful with significant overweight)
+const TARGET_WEIGHT_KG = null;    // optional: base protein and fat on target weight (useful with significant overweight)
 
 // ---------- Rating levels (goal: lose fat, build muscle) ----------
 // Format: [upper limit (exclusive), color] – ascending
@@ -47,15 +48,22 @@ const TARGET_WEIGHT_KG = null;    // optional: base protein on target weight (us
 const LEVELS_PROTEIN = [
   [0.8, "red"], [1.2, "orange"], [1.6, "yellow"], [2.0, "lightGreen"], [Infinity, "darkGreen"],
 ];
-// Fat in % of calories eaten (reference range 20–35 %)
-//   < 15 red · 15–20 orange · 20–30 darkGreen · 30–35 lightGreen
-//   35–40 yellow · 40–45 orange · ≥ 45 red
+// Fat in g per kg body weight
+//   The lower limits are well founded (~0.5–0.6 g/kg minimum for hormones and
+//   fat-soluble vitamins). There is no fixed upper limit – too much fat mainly
+//   crowds out protein and carbs, so the upper levels are a rule of thumb.
+//   < 0.5 red · 0.5–0.6 orange · 0.6–0.8 yellow · 0.8–1.2 darkGreen
+//   1.2–1.4 yellow · 1.4–1.6 orange · ≥ 1.6 red
 const LEVELS_FAT = [
-  [15, "red"], [20, "orange"], [30, "darkGreen"], [35, "lightGreen"],
-  [40, "yellow"], [45, "orange"], [Infinity, "red"],
+  [0.5, "red"], [0.6, "orange"], [0.8, "yellow"], [1.2, "darkGreen"],
+  [1.4, "yellow"], [1.6, "orange"], [Infinity, "red"],
 ];
-// Carbs: not rated (they fill the remaining calories) → gray
+// Carbs: not rated (they fill the remaining calories)
 // Today's totals: not rated (a day in progress would almost always look "too low") → gray
+
+// Range of the color scales below the ratings (values outside sit at the edge)
+const SCALE_PROTEIN = { min: 0.4, max: 2.4, levels: LEVELS_PROTEIN };
+const SCALE_FAT = { min: 0.2, max: 1.8, levels: LEVELS_FAT };
 
 // ---------- Texts ----------
 const TEXTS = {
@@ -112,6 +120,10 @@ const C = {
   red: new Color("#ff453a"),
   green: new Color("#30d158"),
 };
+// Scale colors (images cannot switch between light and dark mode)
+const SCALE_COLORS = {
+  red: "#ff453a", orange: "#ff9f0a", yellow: "#ffd60a", lightGreen: "#a8dc3c", darkGreen: "#30c45a",
+};
 
 // ---------- Load data ----------
 // In the app (e.g. after tapping the widget) the file is fetched from iCloud;
@@ -141,6 +153,9 @@ function num(...keys) {
 }
 function fmt(n) {
   return n == null ? "–" : Math.round(n).toLocaleString(T.locale);
+}
+function fmt1(n) {
+  return n.toLocaleString(T.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 const d = {
@@ -176,39 +191,28 @@ for (const [k, keys] of Object.entries(TODAY_KEYS)) {
 }
 
 // ---------- Rate macros ----------
-function level(value, levels) {
-  for (const [limit, color] of levels) if (value < limit) return C[color];
-  return C.sub;
+function levelName(value, levels) {
+  for (const [limit, color] of levels) if (value < limit) return color;
+  return null;
 }
 const refWeight = TARGET_WEIGHT_KG ?? d.weight;
-// Calories from macros (protein/carbs 4 kcal/g, fat 9 kcal/g); fallback: intake
-const macroKcal = (d.protein ?? 0) * 4 + (d.fat ?? 0) * 9 + (d.carbs ?? 0) * 4;
-const kcalBase = macroKcal > 0 ? macroKcal : d.intake;
 
-// info[k] = { text, color } – shown next to the grams
-const info = { protein: null, fat: null, carbs: null };
-if (d.protein != null && refWeight) {
-  const gkg = Math.round((d.protein / refWeight) * 10) / 10; // color matches the displayed number
-  info.protein = {
-    text: gkg.toLocaleString(T.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " g/kg",
-    color: level(gkg, LEVELS_PROTEIN),
-  };
+// info[k] = { text, color, value, scale } – shown next to the grams, scale below
+function rate(grams, scale) {
+  if (grams == null || !refWeight) return null;
+  const gkg = Math.round((grams / refWeight) * 10) / 10; // color matches the displayed number
+  const name = levelName(gkg, scale.levels);
+  return { text: fmt1(gkg) + " g/kg", color: name ? C[name] : C.sub, value: gkg, scale };
 }
-if (d.fat != null && kcalBase) {
-  const p = Math.round((d.fat * 9 / kcalBase) * 100);
-  info.fat = { text: p + " %", color: level(p, LEVELS_FAT) };
-}
-if (d.carbs != null && kcalBase) {
-  const p = Math.round((d.carbs * 4 / kcalBase) * 100);
-  info.carbs = { text: p + " %", color: C.sub };
-}
+const info = {
+  protein: rate(d.protein, SCALE_PROTEIN),
+  fat: rate(d.fat, SCALE_FAT),
+};
 
 // Targets for the large widget
 const target = {
   proteinMin: refWeight ? refWeight * 1.6 : null,
   proteinOpt: refWeight ? refWeight * 2.0 : null,
-  fatMin: kcalBase ? kcalBase * 0.20 / 9 : null,
-  fatMax: kcalBase ? kcalBase * 0.30 / 9 : null,
 };
 
 const isDeficit = d.deficit == null || d.deficit >= 0;
@@ -225,6 +229,76 @@ if (updatedAt) {
   isStale = (Date.now() - updatedAt.getTime()) / 36e5 > STALE_HOURS;
 }
 
+// ---------- Color scale ----------
+function hexToRgb(hex) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToColor([r, g, b]) {
+  return new Color("#" + [r, g, b].map((x) => Math.round(x).toString(16).padStart(2, "0")).join(""));
+}
+// One color stop in the middle of each level (clipped to the scale range),
+// so the color below the marker matches the color of the rating text.
+function scaleStops(s) {
+  const stops = [];
+  let lo = -Infinity;
+  for (const [limit, name] of s.levels) {
+    const a = Math.max(lo, s.min), b = Math.min(limit, s.max);
+    if (b > a) stops.push([(a + b) / 2, hexToRgb(SCALE_COLORS[name])]);
+    lo = limit;
+  }
+  return stops;
+}
+function colorAt(v, stops) {
+  if (v <= stops[0][0]) return stops[0][1];
+  for (let i = 1; i < stops.length; i++) {
+    const [p1, c1] = stops[i];
+    if (v <= p1) {
+      const [p0, c0] = stops[i - 1];
+      const t = (v - p0) / (p1 - p0);
+      return c0.map((x, j) => x + (c1[j] - x) * t);
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+// Gradient bar with rounded ends and a small marker at the value
+function scaleImage(value, s, width, height) {
+  const ctx = new DrawContext();
+  ctx.size = new Size(width, height);
+  ctx.opaque = false;
+  ctx.respectScreenScale = true;
+
+  const stops = scaleStops(s);
+  const cy = 5.5;          // vertical center of bar and marker (bar sits close below the text)
+  const barH = 5, r = barH / 2, step = 0.5;
+  for (let x = 0; x < width; x += step) {
+    const xc = x + step / 2;
+    // round off both ends
+    let dy = 0;
+    const edge = Math.min(xc, width - xc);
+    if (edge < r) dy = r - Math.sqrt(r * r - (r - edge) * (r - edge));
+    const v = s.min + (xc / width) * (s.max - s.min);
+    ctx.setFillColor(rgbToColor(colorAt(v, stops)));
+    ctx.fillRect(new Rect(x, cy - r + dy, step + 0.3, barH - 2 * dy));
+  }
+
+  // marker: white with a dark outline, visible on every color
+  const pos = Math.min(Math.max((value - s.min) / (s.max - s.min), 0), 1);
+  const mx = Math.min(Math.max(pos * width, 2), width - 2);
+  const outer = new Path();
+  outer.addRoundedRect(new Rect(mx - 2, cy - 5, 4, 10), 1.5, 1.5);
+  ctx.addPath(outer);
+  ctx.setFillColor(new Color("#000000", 0.6));
+  ctx.fillPath();
+  const inner = new Path();
+  inner.addRoundedRect(new Rect(mx - 1, cy - 4, 2, 8), 1, 1);
+  ctx.addPath(inner);
+  ctx.setFillColor(Color.white());
+  ctx.fillPath();
+
+  return ctx.getImage();
+}
+
 // ---------- Helpers ----------
 function txt(stack, s, font, color, lines = 1) {
   const t = stack.addText(s);
@@ -234,13 +308,13 @@ function txt(stack, s, font, color, lines = 1) {
   t.minimumScaleFactor = 0.5;
   return t;
 }
-function row(stack, label, value, unit, big) {
+function row(stack, label, value, big) {
   const r = stack.addStack();
   r.centerAlignContent();
   txt(r, label, Font.systemFont(big ? 15 : 13), C.sub);
   r.addSpacer(8);
   r.addSpacer();
-  txt(r, `${value} ${unit}`, Font.semiboldSystemFont(big ? 16 : 14), C.text);
+  txt(r, value, Font.semiboldSystemFont(big ? 16 : 14), C.text);
 }
 function header(w, small, big) {
   const h = w.addStack();
@@ -251,29 +325,34 @@ function header(w, small, big) {
     txt(h, updatedText, Font.systemFont(big ? 12 : 11), isStale ? C.orange : C.sub);
   }
 }
-// Macros: protein left, fat center, carbs right – grams plus colored rating.
-// With today's totals, a gray second line shows today's grams directly below
-// the average grams (no label, no rating).
+// Macros: protein left, fat center, carbs right – grams plus colored g/kg rating.
+// Second line: today's grams in gray below the average grams (if provided)
+// and a color scale below each rating.
 function macros(stack, big) {
   const m = stack.addStack();
   m.bottomAlignContent();
-  const todayFont = Font.semiboldRoundedSystemFont(big ? 14 : 12);
+  const secondFont = Font.semiboldRoundedSystemFont(big ? 14 : 12);
+  const secondH = big ? 17 : 14;  // about the line height of secondFont
+  const scaleW = big ? 62 : 52;   // about as wide as the rating text
 
-  // One column per part. Label and rating columns get an invisible second line
-  // of the same height, so all first lines stay on one baseline.
+  // One column per part with two lines. Columns without a visible second line
+  // get an invisible one of the same height, so all first lines stay on one baseline.
   function col(cell, s, font, color, below) {
     const c = cell.addStack();
     c.layoutVertically();
     txt(c, s, font, color);
-    if (hasToday) {
-      txt(c, below ?? "0", todayFont, below == null ? Color.clear() : C.sub);
+    if (below && below.scale) {
+      const img = c.addImage(scaleImage(below.value, below.scale, scaleW, secondH));
+      img.imageSize = new Size(scaleW, secondH);
+    } else {
+      txt(c, below ?? "0", secondFont, below == null ? Color.clear() : C.sub);
     }
   }
 
   const items = [
     ["P", d.protein, info.protein, today.protein],
     ["F", d.fat, info.fat, today.fat],
-    [T.carbs, d.carbs, info.carbs, today.carbs],
+    [T.carbs, d.carbs, null, today.carbs],
   ];
   items.forEach(([label, g, p, t], i) => {
     if (i > 0) m.addSpacer();
@@ -281,10 +360,10 @@ function macros(stack, big) {
     cell.bottomAlignContent();
     col(cell, label, Font.mediumSystemFont(big ? 14 : 12), C.sub, null);
     cell.addSpacer(3);
-    col(cell, `${fmt(g)} g`, Font.boldRoundedSystemFont(big ? 20 : 17), C.text, `${fmt(t)} g`);
+    col(cell, `${fmt(g)} g`, Font.boldRoundedSystemFont(big ? 20 : 17), C.text, hasToday ? `${fmt(t)} g` : null);
     if (p != null) {
       cell.addSpacer(4);
-      col(cell, p.text, Font.semiboldRoundedSystemFont(big ? 15 : 13), p.color, null);
+      col(cell, p.text, Font.semiboldRoundedSystemFont(big ? 15 : 13), p.color, p);
     }
   });
 }
@@ -340,21 +419,25 @@ if (family === "accessoryRectangular" || family === "accessoryInline") {
 
     main.addSpacer(18);
 
-    // right column fills the space up to the right edge
+    // right column fills the space up to the right edge; the unit "kcal"
+    // is shown once, right-aligned above the first number
     const gap = big || !hasToday ? 4 : 2;
     const right = main.addStack();
     right.layoutVertically();
-    row(right, T.expenditure, fmt(d.expenditure), "kcal", big);
+    const unit = right.addStack();
+    unit.addSpacer();
+    txt(unit, "kcal", Font.systemFont(big ? 13 : 11), C.sub);
+    row(right, T.expenditure, fmt(d.expenditure), big);
     right.addSpacer(gap);
-    row(right, T.active, fmt(d.active), "kcal", big);
+    row(right, T.active, fmt(d.active), big);
     right.addSpacer(gap);
-    row(right, T.intake, fmt(d.intake), "kcal", big);
+    row(right, T.intake, fmt(d.intake), big);
     if (hasToday) {
       // today's intake, right-aligned below the average intake
       right.addSpacer(1);
       const r = right.addStack();
       r.addSpacer();
-      txt(r, `${T.today} ${fmt(today.intake)} kcal`, Font.systemFont(big ? 13 : 11), C.sub);
+      txt(r, `${T.today} ${fmt(today.intake)}`, Font.systemFont(big ? 13 : 11), C.sub);
     }
 
     w.addSpacer();
@@ -363,7 +446,7 @@ if (family === "accessoryRectangular" || family === "accessoryInline") {
     if (big) {
       // large widget: also show target ranges
       w.addSpacer(10);
-      txt(w, `${T.target}: P ${fmt(target.proteinMin)}–${fmt(target.proteinOpt)}+ g · F ${fmt(target.fatMin)}–${fmt(target.fatMax)} g`,
+      txt(w, `${T.target}: P ${fmt(target.proteinMin)}–${fmt(target.proteinOpt)}+ g · F ${fmt1(0.8)}–${fmt1(1.2)} g/kg`,
           Font.mediumSystemFont(14), C.sub);
       if (refWeight == null) {
         txt(w, T.noWeight, Font.systemFont(12), C.orange, 2);
