@@ -1,271 +1,145 @@
-# Kcal Deficit Widget for iOS (Scriptable + Shortcuts)
+# 🔥 Kcal Deficit Widget
 
-A home screen widget that shows **7-day averages** from Apple Health:
-calorie expenditure, calorie intake, deficit or surplus, and macronutrients
-with a color-coded rating and a small color scale for the goal *lose fat, build muscle*.
-Optionally it also shows **today's totals** (intake and macros) in gray.
+**See at a glance whether you are in a calorie deficit – right on your home screen, without opening an app.**
+
+Log a meal in seconds: **describe it or snap a photo**, and Apple Intelligence estimates calories and macros and saves them to Apple Health. The widget updates right away.
 
 <p align="center">
-  <img src="docs/widget-medium.png" alt="Medium widget showing a 7-day calorie surplus, rated macros with color scales and today's totals" width="480">
+  <img src="docs/widget-medium.png" width="480" alt="Medium widget showing a 7-day calorie balance, rated macros with color scales and today's totals">
   <br>
   <sub>Medium widget (example values)</sub>
 </p>
 
-Scriptable cannot access Apple Health. So an **Apple Shortcut** reads the data
-and saves it as `kcal.json`, and the **Scriptable script** reads that file and draws the widget.
-
-```
-Apple Health ──▶ Shortcut ──▶ iCloud Drive/Scriptable/kcal.json ──▶ Scriptable widget
-```
-
 ## What the widget shows
 
-- **Average deficit or surplus per day** (expenditure − intake): green for a deficit, orange for a surplus
-- **Expenditure** (resting + active energy), thereof active, and **intake** (all in kcal)
-- **Macros**: protein (P), fat (F) and carbs (C) in grams. Protein and fat are rated in g per kg body weight, each with a color scale and a marker for a quick read. Carbs are not rated.
-- **Today** (optional): today's intake below the average intake, and today's grams below each macro, in gray and without a rating (a day in progress would almost always look "too low"). After midnight they show 0 until the shortcut runs again.
-- **Updated**: time of the last update (orange if older than 26 hours)
+- **Calorie balance of the last 7 days:** eaten vs. burned, as an average deficit (green) or surplus (orange) per day
+- **Macros:** protein, fat and carbs, with color scales for protein and fat (goal: *lose fat, build muscle*)
+- **Today:** what you have eaten so far today, in gray
 
-The small widget shows only the deficit or surplus. The large widget adds target ranges for protein (in grams) and fat (in g/kg).
-Supported sizes: small, medium, large, plus lock screen (rectangular and inline).
-The interface is available in English and German (`LANGUAGE` setting).
+All data comes from **Apple Health**. No accounts, no extra app servers.
 
-## Macro rating
+---
 
-Both in g per kg body weight:
+## Before you start
 
-| Color | Protein | Fat |
-|---|---|---|
-| dark green | ≥ 2.0 | 0.8–1.2 |
-| light green | 1.6–2.0 | – |
-| yellow | 1.2–1.6 | 0.6–0.8 or 1.2–1.4 |
-| orange | 0.8–1.2 | 0.5–0.6 or 1.4–1.6 |
-| red | < 0.8 | < 0.5 or ≥ 1.6 |
-
-The color scales cover 0.4–2.4 g/kg (protein, red → green) and 0.2–1.8 g/kg (fat, red → green → red). Values outside the range put the marker at the edge.
-
-Carbs are not rated. They fill the remaining calories and have no fixed target.
-
-Background:
-- Protein: above roughly 1.6 g/kg, more protein adds little extra muscle gain during resistance training ([Morton et al. 2018](https://pubmed.ncbi.nlm.nih.gov/28698222/)). In a calorie deficit, higher amounts can help preserve muscle ([ISSN Position Stand 2017](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5477153/)). So there is no penalty at the top end.
-- Fat: a minimum of roughly 0.5–0.6 g/kg supports hormone production and the uptake of fat-soluble vitamins. There is no fixed upper limit per kg – too much fat mainly crowds out protein and carbs, so the upper levels are a rule of thumb (with typical intakes, 0.8–1.2 g/kg is in line with the reference range of 20–35 % of energy, [AMDR](https://pressbooks.umn.edu/sleepeatandexercise/?p=279)). Fat is rated per kg instead of as a share of calories, because the share shifts with total intake even when the amount of fat stays the same.
-
-The widget only gives guidance and is not a substitute for professional nutrition advice.
-
-## Setup
-
-### 1. The shortcut "Kcal Deficit"
-
-This shortcut queries Apple Health, calculates the 7-day averages and saves them as `kcal.json`.
-It needs no AI and runs in a few seconds.
-
-**Install**
-
-1. On your iPhone, open [`shortcuts/Kcal Deficit.shortcut`](shortcuts/Kcal%20Deficit.shortcut) here on GitHub and tap **View raw** (or the download button) to download the file.
-2. Open the downloaded file (in Safari's downloads or in the Files app). The Shortcuts app opens it – tap **Add Shortcut**.
-3. Keep the name **Kcal Deficit**: the meal logging shortcut below runs it by this name.
-4. Open the shortcut once and check the **Save File** action at the end: the destination must be **iCloud Drive › Scriptable**. If it shows a different folder, tap it and choose the Scriptable folder.
-5. Run it once by hand and allow access to Apple Health and to the Scriptable folder when asked.
-
-The source code is [`shortcuts/Kcal Deficit.cherri`](shortcuts/Kcal%20Deficit.cherri), written in [Cherri](https://cherrilang.org), a programming language that compiles to Apple Shortcuts. See [Building the shortcuts from source](#building-the-shortcuts-from-source).
-
-**How it works**
-
-You do not need to build it by hand, but these are the steps it performs (useful if you want to change it or build it yourself in the Shortcuts app).
-
-**a) Fixed day boundaries**
-
-These make the values match the weekly averages in the Health app. The current, unfinished day is left out on purpose, because a half day would lower every average.
-
-| # | Action | Setting | Name the result |
-|---|---|---|---|
-| 1 | `Current Date` | – | |
-| 2 | `Adjust Date` | *Get Start of Day* → today at 00:00 | **End** |
-| 3 | `Adjust Date` | *Subtract* 7 *days* from **End** | **Start** |
-
-**b) One Health query per value**
-
-Add a `Find Health Samples` action for each of these types:
-
-| Type | Unit | Average used for |
-|---|---|---|
-| Resting Energy | kcal | `Expenditure` |
-| Active Energy | kcal | `Expenditure`, `Active` |
-| Dietary Energy | kcal | `Intake` |
-| Protein | g | `Protein` |
-| Total Fat | g | `Fat` |
-| Carbohydrates | g | `Carbs` |
-
-Use the same settings in every query:
-- Filter: **Start Date is between** *Start* and *End*
-- Group By: **Day**
-- **Fill Missing: off**. Otherwise days without entries count as 0. That matters most for intake: a day you did not log would make your deficit look bigger than it is.
-- Sort By: *None*, Limit: *off*
-
-After each query:
-1. `Calculate Statistics`: **Average** of the samples
-2. `Round Number`: to a whole number
-
-Then calculate the expenditure with `Calculate`: average resting energy **+** average active energy.
-
-**c) Weight**
-
-`Find Health Samples` with type *Weight*, Start Date *in the last 99 years*, Unit *kg*, Sort By *Start Date*, Order *Latest First*, Limit *1*.
-If you do not track your weight in Health, skip this and set `WEIGHT_KG` in the script instead.
-
-**d) Today's totals (optional)**
-
-Add a `Find Health Samples` action for *Dietary Energy*, *Protein*, *Total Fat* and *Carbohydrates* with the filter **Start Date is today** and **no grouping**.
-After each query: `Calculate Statistics` → **Sum**, then `Round Number`.
-If you skip this, the widget simply shows no today values.
-
-**e) Save the result**
-
-1. A **Dictionary** with these keys (values as numbers):
-
-   | Key | Content |
-   |---|---|
-   | `Expenditure` | average resting + active energy (kcal) |
-   | `Active` | average active energy (kcal) |
-   | `Intake` | average dietary energy (kcal) |
-   | `Protein` | average protein (g) |
-   | `Fat` | average fat (g) |
-   | `Carbs` | average carbohydrates (g) |
-   | `Weight` | current weight (kg) |
-   | `TodayIntake` | optional: today's dietary energy (kcal) |
-   | `TodayProtein`, `TodayFat`, `TodayCarbs` | optional: today's macros (g) |
-
-   The German keys `Bedarf`, `Aktiv`, `Aufnahme`, `Fett`, `Kohlenhydrate`, `Gewicht`, `HeuteAufnahme`, `HeuteProtein`, `HeuteFett` and `HeuteKohlenhydrate` work as well.
-2. **Save File**: destination *iCloud Drive/Scriptable*, subpath `kcal.json`, "Ask Where to Save" off, **Overwrite** on.
-
-**Using more than one device (e.g. iPad):** Shortcuts sync via iCloud, but Health data on an iPad can lag behind or be incomplete. If the shortcut runs there, it overwrites `kcal.json` with wrong values. That is why the shortcut starts with `Get Device Details` (*Device Model*) → `If` *Device Model* *is not* *iPhone* → `Stop This Shortcut`. The widget itself works on every device, because it only reads the file.
-
-Example of a resulting `kcal.json`:
-
-```json
-{
-  "Expenditure": 1828,
-  "Active": 323,
-  "Intake": 1221,
-  "Protein": 58,
-  "Fat": 52,
-  "Carbs": 126,
-  "Weight": 80,
-  "TodayIntake": 640,
-  "TodayProtein": 35,
-  "TodayFat": 22,
-  "TodayCarbs": 70
-}
-```
-
-### 2. The script in Scriptable
-
-1. Create a new script in Scriptable and paste the content of [`Kcal-Widget.js`](Kcal-Widget.js).
-2. Set `LANGUAGE` to `"en"` or `"de"`.
-3. Add a Scriptable widget to your home screen, choose the script and set "When Interacting" to **"Open App"**.
-
-### 3. Updating
-
-- **Automatically**: run the shortcut at the end of the shortcut you use to log meals (see [Logging meals with AI](#optional-logging-meals-with-ai-nutrition-tracking-shortcut)) (action *Run Shortcut*, "Show When Run" off). An automation with the trigger "App is opened" also works. Health data cannot be read while the iPhone is locked, so automations based only on time of day are unreliable.
-- **Tapping the widget** opens Scriptable and loads the latest `kcal.json` from iCloud. It does not run the shortcut – the averages only cover completed days and today's totals only change when you log food, which already runs the shortcut.
-- The widget asks iOS for an update every 15 minutes. When it is actually redrawn is up to iOS (often less frequently on an iPad). On other devices, the widget also depends on how quickly iCloud Drive syncs the file.
-
-Because only completed days are counted, the averages change once a day (the first time the shortcut runs after midnight), or when you add entries for a past day.
-
-## Optional: logging meals with AI ("Nutrition Tracking" shortcut)
-
-This is the shortcut I use to log meals. You describe a meal in a few words, take a photo of it, or both,
-an AI model estimates calories and macros, and after you confirm, the shortcut saves them to Apple Health.
-At the end it runs "Kcal Deficit", so the widget data stays up to date.
-Any other way of logging food to Apple Health (for example a food tracking app) works with the widget as well.
-
-**Install**
-
-1. On your iPhone, open [`shortcuts/Nutrition Tracking.shortcut`](shortcuts/Nutrition%20Tracking.shortcut) here on GitHub and tap **View raw** (or the download button).
-2. Open the downloaded file and tap **Add Shortcut** in the Shortcuts app.
-3. Install "Kcal Deficit" first (see above). If the `Run Shortcut` action at the end shows no shortcut, tap it and choose **Kcal Deficit**.
-4. On the first run, allow access to the camera, Apple Intelligence and Apple Health.
-
-It needs a device with Apple Intelligence (`Use Model` action). The source code is [`shortcuts/Nutrition Tracking.cherri`](shortcuts/Nutrition%20Tracking.cherri).
-
-**How it works**
-
-| # | Action | Setting |
-|---|---|---|
-| 1 | `Choose from Menu` | prompt: *"What did you eat?"*, options **Text**, **Photo** and **Text + Photo** |
-| 2 | ↳ **Text**: `Ask for Input` | prompt *"Describe your meal"* → variable **Description** |
-| 3 | ↳ **Photo**: `Take Photo` | 1 photo → variable **Photo** |
-| 4 | ↳ **Text + Photo** | `Take Photo` and `Ask for Input`, both variables |
-| 5 | `Use Model` (Apple Intelligence, Private Cloud Compute) | output type *Dictionary*; prompt below |
-| 6 | `Get Dictionary Value` ×4 | keys `calories`, `fat`, `carbs`, `protein` from the model's *Response* |
-| 7 | `Choose from Menu` | shows the estimate, *"Log this meal?"* **Yes** / **No** |
-| 8 | ↳ **Yes**: `Log Health Sample` ×4 | *Dietary Energy* (kcal), *Total Fat* (g), *Carbohydrates* (g), *Protein* (g), each with the matching value; date left empty = now |
-| 9 | ↳ **Yes**: `Run Shortcut` | **Kcal Deficit**, "Show When Run" off |
-| 10 | ↳ **No**: `Show Result`, `Stop This Shortcut` | *"Logging cancelled."* |
-
-Prompt for step 5:
-
-```text
-Analyze this food input and return ONLY a JSON-formatted answer with the keys
-'calories', 'fat', 'carbs' and 'protein'. The values must be plain numbers
-(calories in kcal, macros in grams).
-Input:
-Description: [Description]
-Photo: [Photo]
-```
-
-Tips:
-- The output type *Dictionary* keeps the model from wrapping its answer in a code block or adding text, which would make `Get Dictionary Value` fail.
-- AI estimates from a description or photo can be well off, especially for oil, sauces and portion sizes. Weighing food and using nutrition labels is more accurate.
-- Remove the confirmation menu (step 7) if you do not want to confirm every entry.
-
-## Building the shortcuts from source
-
-Both shortcuts are written in [Cherri](https://cherrilang.org) and live in [`shortcuts/`](shortcuts):
-
-| Source | Shortcut |
+| You need | Why |
 |---|---|
-| [`Kcal Deficit.cherri`](shortcuts/Kcal%20Deficit.cherri) | [`Kcal Deficit.shortcut`](shortcuts/Kcal%20Deficit.shortcut) |
-| [`Nutrition Tracking.cherri`](shortcuts/Nutrition%20Tracking.cherri) | [`Nutrition Tracking.shortcut`](shortcuts/Nutrition%20Tracking.shortcut) |
+| An iPhone | Health data is read on the iPhone. |
+| The free app **Scriptable** | It displays the widget. You do **not** need to know how to code. |
+| Meals logged in Apple Health | Easiest with the included **Nutrition Tracking** shortcut (step 4). Without food data the widget has nothing to show. |
+| For the AI meal logging: an iPhone with **Apple Intelligence** (iPhone 15 Pro or newer, iOS 26) | The shortcut uses Apple's built-in AI model. |
+| Optional: your weight in Apple Health | Used to rate protein and fat per kg. You can also enter it in the script. |
 
-To change a shortcut, edit the `.cherri` file and compile it:
+> **Why two parts (shortcut + Scriptable)?**
+> Only Apple Shortcuts can read your Health data. The shortcut fetches the numbers, Scriptable shows them as a widget.
 
-```sh
-cd shortcuts
-python3 build.py "Kcal Deficit.cherri"
+---
+
+## Installation (about 5 minutes)
+
+### 1. Install Scriptable
+[**→ Scriptable on the App Store (free)**](https://apps.apple.com/app/scriptable/id1405459188)
+Open the app once afterwards, so its folder in iCloud Drive is created.
+
+### 2. Add the script
+Choose one of the two ways:
+
+**a) Save the file** (no copying)
+1. Open [**Kcal-Widget.js**](Kcal-Widget.js) on your iPhone and tap the **download** button.
+2. Tap **Share** → **Save to Files** → **iCloud Drive › Scriptable** → **Save**.
+
+**b) Copy and paste**
+1. Open [**Kcal-Widget.js**](Kcal-Widget.js) on your iPhone, tap **Raw**, select all and copy.
+2. In Scriptable, tap **+** at the top right, paste the text and name the script `Kcal-Widget`.
+
+✅ **Kcal-Widget** now appears in Scriptable.
+For a German widget, change `LANGUAGE = "en"` to `LANGUAGE = "de"` at the top of the script.
+
+### 3. Add the "Kcal Deficit" shortcut
+This shortcut reads Apple Health and hands the numbers to the widget.
+
+1. Open [**Kcal Deficit.shortcut**](shortcuts/Kcal%20Deficit.shortcut) and tap the **download** button (or **View raw**).
+2. Open the downloaded file (Safari downloads or the Files app) and tap **Add Shortcut**. Keep the name **Kcal Deficit**.
+3. Open the shortcut and check the last action **Save File**: the folder must be **iCloud Drive › Scriptable**. If not, tap it and choose that folder.
+4. **Run it once by hand** and tap **Allow** when it asks for access to Health and the Scriptable folder.
+
+### 4. Log your meals ⭐
+[**→ "Nutrition Tracking" shortcut**](shortcuts/Nutrition%20Tracking.shortcut) – install it the same way as step 3.
+
+**How it works:** run the shortcut → choose **Text**, **Photo** or **Text + Photo** → check the estimate → tap **Yes**.
+Calories and macros go to Apple Health, and **Kcal Deficit** runs automatically, so the widget is always up to date.
+
+On the first run, allow access to the camera, Apple Intelligence and Health.
+If the last action **Run Shortcut** is empty, tap it and choose **Kcal Deficit**.
+
+> 💡 **Tip:** Add "Nutrition Tracking" to your home screen or to the Action Button – then logging a meal takes about 10 seconds.
+
+<details>
+<summary>Alternative: you already use a food tracking app (e.g. Yazio, MyFitnessPal, Lose It)</summary>
+
+That works too, as long as the app writes to Apple Health (check: **Health app → your profile → Apps → your food app → turn on Dietary Energy, Protein, Total Fat and Carbohydrates**).
+
+Because your app does not run Kcal Deficit, let an automation do it:
+1. Open Shortcuts → **Automation** → **+** → **App**.
+2. Choose your food app, select **Is Closed** and **Run Immediately**.
+3. Choose the shortcut **Kcal Deficit** as the action.
+
+Do not use a time-of-day automation: Health data cannot be read while the iPhone is locked, so it often fails.
+</details>
+
+### 5. Place the widget
+1. Long-press an empty spot on the home screen → **Edit** → **Add Widget**.
+2. Search for **Scriptable** and choose the **medium** size (small, large and lock screen widgets work too).
+3. Long-press the new widget → **Edit Widget**:
+   - **Script:** `Kcal-Widget`
+   - **When Interacting:** `Open App`
+
+🎉 **Done!** From now on the widget updates every time you log a meal.
+
+---
+
+## Adjust it to you
+
+Open the script **Kcal-Widget** in Scriptable. At the very top are the settings. These are the only lines you might want to change:
+
+```javascript
+const LANGUAGE = "en";            // "en" or "de"
+const WEIGHT_KG = null;           // your weight, e.g. 80 – only if it is not in Apple Health
+const TARGET_WEIGHT_KG = null;    // optional: rate protein and fat based on your target weight
 ```
 
-[`build.py`](shortcuts/build.py) needs Cherri, Python 3 and curl. It compiles the file with Cherri, turns the numbers in the Health filters into whole numbers (Cherri writes them as decimals like `4.0`, and iOS then does not recognize the *Weight* filter), and signs the result. iOS only imports signed shortcuts: on a Mac the script uses the built-in `shortcuts sign` command, on other systems RoutineHub's signing service (HubSign).
-Cherri has no built-in Health actions yet, so `Find Health Samples`, `Log Health Sample`, `Calculate Statistics` and the Scriptable target folder of `Save File` are declared as custom actions with their raw Shortcuts parameters at the top of each file.
+The color levels for protein and fat can be changed as well – see [docs/TECHNICAL.md](docs/TECHNICAL.md#macro-rating).
 
-## Settings in the script
+---
 
-| Constant | Default | Meaning |
-|---|---|---|
-| `LANGUAGE` | `"en"` | interface language: `"en"` or `"de"` |
-| `FILE` | `kcal.json` | file name in iCloud Drive/Scriptable |
-| `STALE_HOURS` | `26` | data older than this is marked orange |
-| `REFRESH_MIN` | `15` | requested update interval in minutes |
-| `WEIGHT_KG` | `null` | fallback weight if the shortcut does not provide one |
-| `TARGET_WEIGHT_KG` | `null` | base protein and fat on the target weight (useful with significant overweight) |
-| `LEVELS_PROTEIN`, `LEVELS_FAT` | see above | limits of the color levels |
-| `SCALE_PROTEIN`, `SCALE_FAT` | see above | range of the color scales |
+## Problems?
 
-## Notes and limitations
+| What you see | Solution |
+|---|---|
+| "kcal.json is missing – run the shortcut once." | Run **Kcal Deficit** by hand (step 3) and check that **Save File** points to the Scriptable folder. |
+| "No weight – …" | Add your weight in Apple Health or set `WEIGHT_KG` in the script. |
+| Intake or macros show 0 or "–" | Apple Health has no food data for the last 7 days. If you use a food app, check that it may write to Health. |
+| "Updated" time is orange | The data is older than 26 hours. Log a meal or run **Kcal Deficit**. |
+| Today's values show 0 after midnight | Normal – they reset until the shortcut runs again on the new day. |
+| The widget does not refresh | iOS decides when widgets are redrawn. Tap the widget to load the latest data. |
+| Something else | [Open an issue](../../issues) and describe what you see (a screenshot helps). |
 
-- Calorie values are estimates. The Apple Watch can be noticeably off on expenditure, and food logs are rarely complete. The most reliable check is your weight trend over several weeks.
-- The shortcut cannot detect partially logged days. They lower the average intake.
-- If the watch was not worn for part of a day, resting energy for that day is too low as well.
+---
 
-## Disclaimer
+## Privacy
 
-This project is provided for personal use and information only. It is not medical or nutritional advice
-and not a medical device. Talk to a doctor or registered dietitian before changing your diet,
-especially if you have health conditions.
+There are no servers and no tracking in this project. The numbers are stored in a small file (`kcal.json`) in your iCloud Drive.
+The AI meal estimate runs through Apple Intelligence – on the device or on Apple's Private Cloud Compute.
 
-This is an independent project. It is not affiliated with or endorsed by Apple or the developer of Scriptable.
-Apple Health, Shortcuts, iCloud and Apple Intelligence are trademarks of Apple Inc.
+## Important note
 
-## License
+The widget shows estimates. Calorie burn measured by the Apple Watch and AI estimates of meals can be noticeably off – the most reliable check is your weight trend over several weeks.
+This project is **not medical or nutritional advice** and not a medical device. Talk to a doctor or registered dietitian before changing your diet, especially if you have health conditions.
 
-[MIT](LICENSE) © 2026 Anton Angierski
+This is an independent project, not affiliated with or endorsed by Apple or the developer of Scriptable. Apple Health, Shortcuts, iCloud and Apple Intelligence are trademarks of Apple Inc.
+
+---
+
+**For developers:** how the shortcuts and the script work together, the exact calculation, the macro rating with sources and how to build the shortcuts from source: [**docs/TECHNICAL.md**](docs/TECHNICAL.md)
+
+**License:** [MIT](LICENSE) © 2026 Anton Angierski
