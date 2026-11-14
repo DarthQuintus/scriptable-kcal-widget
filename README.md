@@ -56,7 +56,7 @@ The widget only gives guidance and is not a substitute for professional nutritio
 
 ### 1. The shortcut "Kcal Deficit"
 
-https://www.icloud.com/shortcuts/0f9098fc2b584019b69dd829c344f55a
+https://www.icloud.com/shortcuts/e56d64a47d154507ba5fcbac1d2cc75b
 
 This shortcut queries Apple Health, calculates the 7-day averages and saves them as `kcal.json`.
 It needs no AI and runs in a few seconds.
@@ -163,7 +163,8 @@ Because only completed days are counted, the averages change once a day (the fir
 
 ## Optional: logging meals with AI ("Nutrition Tracking" shortcut)
 
-https://www.icloud.com/shortcuts/f81df3171f2c4cdea531167ceca31fb6
+https://www.icloud.com/shortcuts/a08a1b4513c341468432e2c9faabbc40
+
 This is the shortcut I use to log meals. You describe a meal in a few words or take a photo of it,
 an AI model estimates calories and macros, and the shortcut saves them to Apple Health.
 At the end it runs "Kcal Deficit", so the widget data stays up to date.
