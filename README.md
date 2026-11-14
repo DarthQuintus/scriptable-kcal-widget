@@ -110,7 +110,7 @@ Then calculate the expenditure with `Calculate`: average resting energy **+** av
 
 **c) Weight**
 
-`Find Health Samples` with type *Weight*, Start Date *in the last 99 years*, Sort By *Start Date*, Order *Latest First*, Limit *off*. The widget reads the first (newest) value.
+`Find Health Samples` with type *Weight*, Start Date *in the last 99 years*, Unit *kg*, Sort By *Start Date*, Order *Latest First*, Limit *1*.
 If you do not track your weight in Health, skip this and set `WEIGHT_KG` in the script instead.
 
 **d) Today's totals (optional)**
@@ -232,10 +232,10 @@ To change a shortcut, edit the `.cherri` file and compile it:
 
 ```sh
 cd shortcuts
-cherri "Kcal Deficit.cherri" --share=anyone
+python3 build.py "Kcal Deficit.cherri"
 ```
 
-iOS only imports signed shortcuts. On a Mac, Cherri signs with the built-in `shortcuts sign` command; on other systems it uses RoutineHub's signing service (HubSign).
+[`build.py`](shortcuts/build.py) needs Cherri, Python 3 and curl. It compiles the file with Cherri, turns the numbers in the Health filters into whole numbers (Cherri writes them as decimals like `4.0`, and iOS then does not recognize the *Weight* filter), and signs the result. iOS only imports signed shortcuts: on a Mac the script uses the built-in `shortcuts sign` command, on other systems RoutineHub's signing service (HubSign).
 Cherri has no built-in Health actions yet, so `Find Health Samples`, `Log Health Sample`, `Calculate Statistics` and the Scriptable target folder of `Save File` are declared as custom actions with their raw Shortcuts parameters at the top of each file.
 
 ## Settings in the script

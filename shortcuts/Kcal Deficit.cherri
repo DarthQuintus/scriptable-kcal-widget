@@ -6,8 +6,8 @@ averages (expenditure, intake, macros), adds the current weight and today's
 totals, and saves everything as iCloud Drive/Scriptable/kcal.json for the
 Scriptable widget (Kcal-Widget.js).
 
-Compile with Cherri (https://cherrilang.org):
-    cherri "Kcal Deficit.cherri" --hubsign -o "Kcal Deficit.shortcut"
+Build with build.py in this folder (runs Cherri, see README):
+    python3 build.py "Kcal Deficit.cherri"
 
 Cherri has no built-in Health actions, so "Find Health Samples" and the
 "Save File" target folder are declared below as custom actions with their
@@ -161,15 +161,14 @@ action 'filter.health.quantity' findCarbs7d() {
 }
 
 /* ---------- Find Health Samples: latest weight ---------- */
-/* Same settings as the original shortcut: Type is Weight, Start Date in the
-   last 99 years, sorted Latest First, limit OFF. The result is a list of all
-   weights, newest first; the widget reads the first number. (With limit 1,
-   the shortcut wrote a wrong value.) */
+/* Type is Weight AND Start Date is in the last 99 years, unit kg,
+   sorted Latest First, limit 1. */
 
 action 'filter.health.quantity' findLatestWeight() {
+    "WFHKSampleFilteringUnit": "kg",
     "WFContentItemSortProperty": "Start Date",
     "WFContentItemSortOrder": "Latest First",
-    "WFContentItemLimitEnabled": false,
+    "WFContentItemLimitEnabled": true,
     "WFContentItemLimitNumber": 1,
     "WFContentItemFilter": {
         "WFSerializationType": "WFContentPredicateTableTemplate",
