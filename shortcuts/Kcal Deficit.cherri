@@ -6,8 +6,8 @@ averages (expenditure, intake, macros), adds the current weight and today's
 totals, and saves everything as iCloud Drive/Scriptable/kcal.json for the
 Scriptable widget (Kcal-Widget.js).
 
-Compile with Cherri (https://cherrilang.org):
-    cherri "Kcal Deficit.cherri" --hubsign -o "Kcal Deficit.shortcut"
+Build with build.py in this folder (runs Cherri, see README):
+    python3 build.py "Kcal Deficit.cherri"
 
 Cherri has no built-in Health actions, so "Find Health Samples" and the
 "Save File" target folder are declared below as custom actions with their
@@ -161,7 +161,8 @@ action 'filter.health.quantity' findCarbs7d() {
 }
 
 /* ---------- Find Health Samples: latest weight ---------- */
-/* Type is Weight, sorted Latest First, limit 1. */
+/* Type is Weight AND Start Date is in the last 99 years, unit kg,
+   sorted Latest First, limit 1. */
 
 action 'filter.health.quantity' findLatestWeight() {
     "WFHKSampleFilteringUnit": "kg",
@@ -176,7 +177,9 @@ action 'filter.health.quantity' findLatestWeight() {
             "WFContentPredicateBoundedDate": false,
             "WFActionParameterFilterTemplates": [
                 {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
-                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Weight"}}}
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Weight"}}},
+                {"Property": "Start Date", "Operator": 1001, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 4, "Number": "99"}}
             ]
         }
     }
@@ -253,6 +256,18 @@ action 'filter.health.quantity' findCarbsToday() {
     }
 }
 
+/* ---------- Calculate Statistics ---------- */
+/* Declared here because Shortcuts expects the samples under the key
+   'Input', while Cherri's built-in statistic() writes 'WFInput'. */
+
+action 'statistics' averageOf(variable samples: 'Input') {
+    "WFStatisticsOperation": "Average"
+}
+
+action 'statistics' sumOf(variable samples: 'Input') {
+    "WFStatisticsOperation": "Sum"
+}
+
 /* ---------- Save File into iCloud Drive/Scriptable ---------- */
 
 action 'documentpicker.save' saveToScriptable(variable content: 'WFInput', text path: 'WFFileDestinationPath') {
@@ -285,29 +300,29 @@ const Now = currentDate()
 
 // b) 7-day averages (one value per day, missing days are skipped)
 const ActiveSamples = findActiveEnergy7d()
-const ActiveAverage = statistic("Average", ActiveSamples)
+const ActiveAverage = averageOf(ActiveSamples)
 const Active = round(ActiveAverage)
 
 const RestingSamples = findRestingEnergy7d()
-const RestingAverage = statistic("Average", RestingSamples)
+const RestingAverage = averageOf(RestingSamples)
 
 const ExpenditureSum = RestingAverage + ActiveAverage
 const Expenditure = round(ExpenditureSum)
 
 const IntakeSamples = findDietaryEnergy7d()
-const IntakeAverage = statistic("Average", IntakeSamples)
+const IntakeAverage = averageOf(IntakeSamples)
 const Intake = round(IntakeAverage)
 
 const ProteinSamples = findProtein7d()
-const ProteinAverage = statistic("Average", ProteinSamples)
+const ProteinAverage = averageOf(ProteinSamples)
 const Protein = round(ProteinAverage)
 
 const FatSamples = findFat7d()
-const FatAverage = statistic("Average", FatSamples)
+const FatAverage = averageOf(FatSamples)
 const Fat = round(FatAverage)
 
 const CarbsSamples = findCarbs7d()
-const CarbsAverage = statistic("Average", CarbsSamples)
+const CarbsAverage = averageOf(CarbsSamples)
 const Carbs = round(CarbsAverage)
 
 // c) Latest weight
@@ -315,19 +330,19 @@ const Weight = findLatestWeight()
 
 // d) Today's totals
 const TodayIntakeSamples = findDietaryEnergyToday()
-const TodayIntakeSum = statistic("Sum", TodayIntakeSamples)
+const TodayIntakeSum = sumOf(TodayIntakeSamples)
 const TodayIntake = round(TodayIntakeSum)
 
 const TodayProteinSamples = findProteinToday()
-const TodayProteinSum = statistic("Sum", TodayProteinSamples)
+const TodayProteinSum = sumOf(TodayProteinSamples)
 const TodayProtein = round(TodayProteinSum)
 
 const TodayFatSamples = findFatToday()
-const TodayFatSum = statistic("Sum", TodayFatSamples)
+const TodayFatSum = sumOf(TodayFatSamples)
 const TodayFat = round(TodayFatSum)
 
 const TodayCarbsSamples = findCarbsToday()
-const TodayCarbsSum = statistic("Sum", TodayCarbsSamples)
+const TodayCarbsSum = sumOf(TodayCarbsSamples)
 const TodayCarbs = round(TodayCarbsSum)
 
 // e) Save the result as kcal.json for the widget

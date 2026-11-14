@@ -5,8 +5,8 @@ Describe a meal (text, photo or both). An Apple Intelligence model estimates
 calories and macros, you confirm, and the values are logged to Apple Health.
 Afterwards the "Kcal Deficit" shortcut runs, so the widget data stays current.
 
-Compile with Cherri (https://cherrilang.org):
-    cherri "Nutrition Tracking.cherri" --hubsign -o "Nutrition Tracking.shortcut"
+Build with build.py in this folder (runs Cherri, see README):
+    python3 build.py "Nutrition Tracking.cherri"
 
 Cherri has no built-in Health actions, so "Log Health Sample" is declared
 below as custom actions with their raw Shortcuts parameters. The amounts
