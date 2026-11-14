@@ -110,7 +110,7 @@ Then calculate the expenditure with `Calculate`: average resting energy **+** av
 
 **c) Weight**
 
-`Find Health Samples` with type *Weight*, Sort By *Start Date*, Order *Latest First*, Limit *1*.
+`Find Health Samples` with type *Weight*, Start Date *in the last 99 years*, Sort By *Start Date*, Order *Latest First*, Limit *off*. The widget reads the first (newest) value.
 If you do not track your weight in Health, skip this and set `WEIGHT_KG` in the script instead.
 
 **d) Today's totals (optional)**

@@ -161,12 +161,15 @@ action 'filter.health.quantity' findCarbs7d() {
 }
 
 /* ---------- Find Health Samples: latest weight ---------- */
-/* Type is Weight, sorted Latest First, limit 1. */
+/* Same settings as the original shortcut: Type is Weight, Start Date in the
+   last 99 years, sorted Latest First, limit OFF. The result is a list of all
+   weights, newest first; the widget reads the first number. (With limit 1,
+   the shortcut wrote a wrong value.) */
 
 action 'filter.health.quantity' findLatestWeight() {
     "WFContentItemSortProperty": "Start Date",
     "WFContentItemSortOrder": "Latest First",
-    "WFContentItemLimitEnabled": true,
+    "WFContentItemLimitEnabled": false,
     "WFContentItemLimitNumber": 1,
     "WFContentItemFilter": {
         "WFSerializationType": "WFContentPredicateTableTemplate",
@@ -175,7 +178,9 @@ action 'filter.health.quantity' findLatestWeight() {
             "WFContentPredicateBoundedDate": false,
             "WFActionParameterFilterTemplates": [
                 {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
-                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Weight"}}}
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Weight"}}},
+                {"Property": "Start Date", "Operator": 1001, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 4, "Number": "99"}}
             ]
         }
     }
