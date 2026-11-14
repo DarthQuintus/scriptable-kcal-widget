@@ -164,7 +164,6 @@ action 'filter.health.quantity' findCarbs7d() {
 /* Type is Weight, sorted Latest First, limit 1. */
 
 action 'filter.health.quantity' findLatestWeight() {
-    "WFHKSampleFilteringUnit": "kg",
     "WFContentItemSortProperty": "Start Date",
     "WFContentItemSortOrder": "Latest First",
     "WFContentItemLimitEnabled": true,
@@ -253,6 +252,18 @@ action 'filter.health.quantity' findCarbsToday() {
     }
 }
 
+/* ---------- Calculate Statistics ---------- */
+/* Declared here because Shortcuts expects the samples under the key
+   'Input', while Cherri's built-in statistic() writes 'WFInput'. */
+
+action 'statistics' averageOf(variable samples: 'Input') {
+    "WFStatisticsOperation": "Average"
+}
+
+action 'statistics' sumOf(variable samples: 'Input') {
+    "WFStatisticsOperation": "Sum"
+}
+
 /* ---------- Save File into iCloud Drive/Scriptable ---------- */
 
 action 'documentpicker.save' saveToScriptable(variable content: 'WFInput', text path: 'WFFileDestinationPath') {
@@ -285,29 +296,29 @@ const Now = currentDate()
 
 // b) 7-day averages (one value per day, missing days are skipped)
 const ActiveSamples = findActiveEnergy7d()
-const ActiveAverage = statistic("Average", ActiveSamples)
+const ActiveAverage = averageOf(ActiveSamples)
 const Active = round(ActiveAverage)
 
 const RestingSamples = findRestingEnergy7d()
-const RestingAverage = statistic("Average", RestingSamples)
+const RestingAverage = averageOf(RestingSamples)
 
 const ExpenditureSum = RestingAverage + ActiveAverage
 const Expenditure = round(ExpenditureSum)
 
 const IntakeSamples = findDietaryEnergy7d()
-const IntakeAverage = statistic("Average", IntakeSamples)
+const IntakeAverage = averageOf(IntakeSamples)
 const Intake = round(IntakeAverage)
 
 const ProteinSamples = findProtein7d()
-const ProteinAverage = statistic("Average", ProteinSamples)
+const ProteinAverage = averageOf(ProteinSamples)
 const Protein = round(ProteinAverage)
 
 const FatSamples = findFat7d()
-const FatAverage = statistic("Average", FatSamples)
+const FatAverage = averageOf(FatSamples)
 const Fat = round(FatAverage)
 
 const CarbsSamples = findCarbs7d()
-const CarbsAverage = statistic("Average", CarbsSamples)
+const CarbsAverage = averageOf(CarbsSamples)
 const Carbs = round(CarbsAverage)
 
 // c) Latest weight
@@ -315,19 +326,19 @@ const Weight = findLatestWeight()
 
 // d) Today's totals
 const TodayIntakeSamples = findDietaryEnergyToday()
-const TodayIntakeSum = statistic("Sum", TodayIntakeSamples)
+const TodayIntakeSum = sumOf(TodayIntakeSamples)
 const TodayIntake = round(TodayIntakeSum)
 
 const TodayProteinSamples = findProteinToday()
-const TodayProteinSum = statistic("Sum", TodayProteinSamples)
+const TodayProteinSum = sumOf(TodayProteinSamples)
 const TodayProtein = round(TodayProteinSum)
 
 const TodayFatSamples = findFatToday()
-const TodayFatSum = statistic("Sum", TodayFatSamples)
+const TodayFatSum = sumOf(TodayFatSamples)
 const TodayFat = round(TodayFatSum)
 
 const TodayCarbsSamples = findCarbsToday()
-const TodayCarbsSum = statistic("Sum", TodayCarbsSamples)
+const TodayCarbsSum = sumOf(TodayCarbsSamples)
 const TodayCarbs = round(TodayCarbsSum)
 
 // e) Save the result as kcal.json for the widget

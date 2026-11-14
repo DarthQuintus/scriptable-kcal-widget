@@ -236,7 +236,7 @@ cherri "Kcal Deficit.cherri" --share=anyone
 ```
 
 iOS only imports signed shortcuts. On a Mac, Cherri signs with the built-in `shortcuts sign` command; on other systems it uses RoutineHub's signing service (HubSign).
-Cherri has no built-in Health actions yet, so `Find Health Samples`, `Log Health Sample` and the Scriptable target folder of `Save File` are declared as custom actions with their raw Shortcuts parameters at the top of each file.
+Cherri has no built-in Health actions yet, so `Find Health Samples`, `Log Health Sample`, `Calculate Statistics` and the Scriptable target folder of `Save File` are declared as custom actions with their raw Shortcuts parameters at the top of each file.
 
 ## Settings in the script
 
