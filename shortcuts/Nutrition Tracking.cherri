@@ -1,0 +1,103 @@
+/*
+Nutrition Tracking
+------------------
+Describe a meal (text, photo or both). An Apple Intelligence model estimates
+calories and macros, you confirm, and the values are logged to Apple Health.
+Afterwards the "Kcal Deficit" shortcut runs, so the widget data stays current.
+
+Compile with Cherri (https://cherrilang.org):
+    cherri "Nutrition Tracking.cherri" --hubsign -o "Nutrition Tracking.shortcut"
+
+Cherri has no built-in Health actions, so "Log Health Sample" is declared
+below as custom actions with their raw Shortcuts parameters. The amounts
+refer to the named variables Calories, Fat, Carbs and Protein.
+*/
+
+#include 'actions/media'
+#include 'actions/scripting'
+#include 'actions/shortcuts'
+
+#define name Nutrition Tracking
+#define color green
+#define glyph utensils
+
+/* ---------- Use Model: Apple Intelligence (Private Cloud Compute), output as Dictionary ---------- */
+
+action 'askllm' estimateNutrition(text prompt: 'WFLLMPrompt') {
+    "WFLLMModel": "Apple Intelligence Pro",
+    "WFGenerativeResultType": "Dictionary"
+}
+
+/* ---------- Log Health Sample (date left empty = now) ---------- */
+
+action 'health.quantity.log' logDietaryEnergy() {
+    "WFQuantitySampleType": "Dietary Calories",
+    "WFQuantitySampleQuantity": {"WFSerializationType": "WFQuantityFieldValue",
+        "Value": {"Unit": "kcal", "Magnitude": {"Type": "Variable", "VariableName": "Calories"}}}
+}
+
+action 'health.quantity.log' logFat() {
+    "WFQuantitySampleType": "Total Fat",
+    "WFQuantitySampleQuantity": {"WFSerializationType": "WFQuantityFieldValue",
+        "Value": {"Unit": "g", "Magnitude": {"Type": "Variable", "VariableName": "Fat"}}}
+}
+
+action 'health.quantity.log' logCarbs() {
+    "WFQuantitySampleType": "Carbohydrates",
+    "WFQuantitySampleQuantity": {"WFSerializationType": "WFQuantityFieldValue",
+        "Value": {"Unit": "g", "Magnitude": {"Type": "Variable", "VariableName": "Carbs"}}}
+}
+
+action 'health.quantity.log' logProtein() {
+    "WFQuantitySampleType": "Protein",
+    "WFQuantitySampleQuantity": {"WFSerializationType": "WFQuantityFieldValue",
+        "Value": {"Unit": "g", "Magnitude": {"Type": "Variable", "VariableName": "Protein"}}}
+}
+
+/* ---------- Run Shortcut "Kcal Deficit" without showing it ---------- */
+
+action 'runworkflow' runKcalDeficit() {
+    "WFWorkflowName": "Kcal Deficit",
+    "WFWorkflow": {"workflowName": "Kcal Deficit", "isSelf": false},
+    "WFShowWorkflow": false
+}
+
+/* ======================================================================= */
+
+// 1. What did you eat? Text, photo, or both.
+@Description = ""
+@Photo = ""
+
+menu "What did you eat?" {
+    item "Text":
+        @Description = prompt("Describe your meal")
+    item "Photo":
+        @Photo = takePhoto()
+    item "Text + Photo":
+        @Photo = takePhoto()
+        @Description = prompt("Describe your meal")
+}
+
+// 2. Let the model estimate calories and macros.
+const Answer = estimateNutrition("Analyze this food input and return ONLY a JSON-formatted answer with the keys 'calories', 'fat', 'carbs' and 'protein'. The values must be plain numbers (calories in kcal, macros in grams).\nInput:\nDescription: {Description}\nPhoto: {Photo}")
+
+@Calories = getValue(Answer, "calories")
+@Fat = getValue(Answer, "fat")
+@Carbs = getValue(Answer, "carbs")
+@Protein = getValue(Answer, "protein")
+
+// 3. Confirm and log to Apple Health.
+const Summary = "{Calories} kcal\n{Fat} g fat\n{Carbs} g carbs\n{Protein} g protein\nLog this meal?"
+
+menu Summary {
+    item "Yes":
+        logDietaryEnergy()
+        logFat()
+        logCarbs()
+        logProtein()
+        // Update kcal.json for the widget.
+        runKcalDeficit()
+    item "No":
+        show("Logging cancelled.")
+        stop()
+}

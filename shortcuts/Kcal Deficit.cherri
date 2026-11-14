@@ -1,0 +1,347 @@
+/*
+Kcal Deficit
+------------
+Reads the last 7 completed days from Apple Health, calculates the daily
+averages (expenditure, intake, macros), adds the current weight and today's
+totals, and saves everything as iCloud Drive/Scriptable/kcal.json for the
+Scriptable widget (Kcal-Widget.js).
+
+Compile with Cherri (https://cherrilang.org):
+    cherri "Kcal Deficit.cherri" --hubsign -o "Kcal Deficit.shortcut"
+
+Cherri has no built-in Health actions, so "Find Health Samples" and the
+"Save File" target folder are declared below as custom actions with their
+raw Shortcuts parameters. The date filters refer to the named variables
+`Start` and `End` (set with @Start / @End further down).
+*/
+
+#include 'actions/calendar'
+#include 'actions/device'
+#include 'actions/documents'
+#include 'actions/math'
+
+#define name Kcal Deficit
+#define color darkblue
+#define glyph fire
+
+/* ---------- Find Health Samples: 7-day window, grouped by day ---------- */
+/* Filter: Type is <type> AND Start Date is between Start and End.
+   Group By Day, Fill Missing OFF (unlogged days must not count as 0). */
+
+action 'filter.health.quantity' findActiveEnergy7d() {
+    "WFHKSampleFilteringUnit": "kcal",
+    "WFHKSampleFilteringGroupBy": "Day",
+    "WFHKSampleFilteringFillMissing": false,
+    "WFContentItemLimitEnabled": false,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Active Calories"}}},
+                {"Property": "Start Date", "Operator": 1003, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7,
+                            "Date": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "Start"}},
+                            "AnotherDate": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "End"}}}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findRestingEnergy7d() {
+    "WFHKSampleFilteringUnit": "kcal",
+    "WFHKSampleFilteringGroupBy": "Day",
+    "WFHKSampleFilteringFillMissing": false,
+    "WFContentItemLimitEnabled": false,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Resting Calories"}}},
+                {"Property": "Start Date", "Operator": 1003, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7,
+                            "Date": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "Start"}},
+                            "AnotherDate": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "End"}}}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findDietaryEnergy7d() {
+    "WFHKSampleFilteringUnit": "kcal",
+    "WFHKSampleFilteringGroupBy": "Day",
+    "WFHKSampleFilteringFillMissing": false,
+    "WFContentItemLimitEnabled": false,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Dietary Calories"}}},
+                {"Property": "Start Date", "Operator": 1003, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7,
+                            "Date": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "Start"}},
+                            "AnotherDate": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "End"}}}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findProtein7d() {
+    "WFHKSampleFilteringUnit": "g",
+    "WFHKSampleFilteringGroupBy": "Day",
+    "WFHKSampleFilteringFillMissing": false,
+    "WFContentItemLimitEnabled": false,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Protein"}}},
+                {"Property": "Start Date", "Operator": 1003, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7,
+                            "Date": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "Start"}},
+                            "AnotherDate": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "End"}}}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findFat7d() {
+    "WFHKSampleFilteringUnit": "g",
+    "WFHKSampleFilteringGroupBy": "Day",
+    "WFHKSampleFilteringFillMissing": false,
+    "WFContentItemLimitEnabled": false,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Total Fat"}}},
+                {"Property": "Start Date", "Operator": 1003, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7,
+                            "Date": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "Start"}},
+                            "AnotherDate": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "End"}}}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findCarbs7d() {
+    "WFHKSampleFilteringUnit": "g",
+    "WFHKSampleFilteringGroupBy": "Day",
+    "WFHKSampleFilteringFillMissing": false,
+    "WFContentItemLimitEnabled": false,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Carbohydrates"}}},
+                {"Property": "Start Date", "Operator": 1003, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7,
+                            "Date": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "Start"}},
+                            "AnotherDate": {"WFSerializationType": "WFTextTokenAttachment", "Value": {"Type": "Variable", "VariableName": "End"}}}}
+            ]
+        }
+    }
+}
+
+/* ---------- Find Health Samples: latest weight ---------- */
+/* Type is Weight, sorted Latest First, limit 1. */
+
+action 'filter.health.quantity' findLatestWeight() {
+    "WFHKSampleFilteringUnit": "kg",
+    "WFContentItemSortProperty": "Start Date",
+    "WFContentItemSortOrder": "Latest First",
+    "WFContentItemLimitEnabled": true,
+    "WFContentItemLimitNumber": 1,
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Weight"}}}
+            ]
+        }
+    }
+}
+
+/* ---------- Find Health Samples: today, not grouped ---------- */
+/* Filter: Type is <type> AND Start Date is today. */
+
+action 'filter.health.quantity' findDietaryEnergyToday() {
+    "WFHKSampleFilteringUnit": "kcal",
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Dietary Calories"}}},
+                {"Property": "Start Date", "Operator": 1002, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findProteinToday() {
+    "WFHKSampleFilteringUnit": "g",
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Protein"}}},
+                {"Property": "Start Date", "Operator": 1002, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findFatToday() {
+    "WFHKSampleFilteringUnit": "g",
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Total Fat"}}},
+                {"Property": "Start Date", "Operator": 1002, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7}}
+            ]
+        }
+    }
+}
+
+action 'filter.health.quantity' findCarbsToday() {
+    "WFHKSampleFilteringUnit": "g",
+    "WFContentItemFilter": {
+        "WFSerializationType": "WFContentPredicateTableTemplate",
+        "Value": {
+            "WFActionParameterFilterPrefix": 1,
+            "WFContentPredicateBoundedDate": false,
+            "WFActionParameterFilterTemplates": [
+                {"Property": "Type", "Operator": 4, "Removable": false, "Bounded": true,
+                 "Values": {"Enumeration": {"WFSerializationType": "WFStringSubstitutableState", "Value": "Carbohydrates"}}},
+                {"Property": "Start Date", "Operator": 1002, "Removable": false, "Bounded": true,
+                 "Values": {"Unit": 16, "Number": 7}}
+            ]
+        }
+    }
+}
+
+/* ---------- Save File into iCloud Drive/Scriptable ---------- */
+
+action 'documentpicker.save' saveToScriptable(variable content: 'WFInput', text path: 'WFFileDestinationPath') {
+    "WFAskWhereToSave": false,
+    "WFSaveFileOverwrite": true,
+    "WFFolder": {
+        "displayName": "Scriptable",
+        "filename": "Documents",
+        "fileLocation": {
+            "WFFileLocationType": "iCloud",
+            "appContainerBundleIdentifier": "dk.simonbs.Scriptable",
+            "relativeSubpath": "iCloud~dk~simonbs~Scriptable/Documents"
+        }
+    }
+}
+
+/* ======================================================================= */
+
+// Only run on an iPhone: Health data on an iPad can lag behind and would
+// overwrite kcal.json with wrong values.
+const DeviceModel = getDeviceDetail("Device Model")
+if DeviceModel != "iPhone" {
+    stop()
+}
+
+// a) Fixed day boundaries: the 7 completed days before today.
+const Now = currentDate()
+@End = adjustDate(Now, "Get Start of Day")
+@Start = adjustDate(End, "Subtract", 7, "days")
+
+// b) 7-day averages (one value per day, missing days are skipped)
+const ActiveSamples = findActiveEnergy7d()
+const ActiveAverage = statistic("Average", ActiveSamples)
+const Active = round(ActiveAverage)
+
+const RestingSamples = findRestingEnergy7d()
+const RestingAverage = statistic("Average", RestingSamples)
+
+const ExpenditureSum = RestingAverage + ActiveAverage
+const Expenditure = round(ExpenditureSum)
+
+const IntakeSamples = findDietaryEnergy7d()
+const IntakeAverage = statistic("Average", IntakeSamples)
+const Intake = round(IntakeAverage)
+
+const ProteinSamples = findProtein7d()
+const ProteinAverage = statistic("Average", ProteinSamples)
+const Protein = round(ProteinAverage)
+
+const FatSamples = findFat7d()
+const FatAverage = statistic("Average", FatSamples)
+const Fat = round(FatAverage)
+
+const CarbsSamples = findCarbs7d()
+const CarbsAverage = statistic("Average", CarbsSamples)
+const Carbs = round(CarbsAverage)
+
+// c) Latest weight
+const Weight = findLatestWeight()
+
+// d) Today's totals
+const TodayIntakeSamples = findDietaryEnergyToday()
+const TodayIntakeSum = statistic("Sum", TodayIntakeSamples)
+const TodayIntake = round(TodayIntakeSum)
+
+const TodayProteinSamples = findProteinToday()
+const TodayProteinSum = statistic("Sum", TodayProteinSamples)
+const TodayProtein = round(TodayProteinSum)
+
+const TodayFatSamples = findFatToday()
+const TodayFatSum = statistic("Sum", TodayFatSamples)
+const TodayFat = round(TodayFatSum)
+
+const TodayCarbsSamples = findCarbsToday()
+const TodayCarbsSum = statistic("Sum", TodayCarbsSamples)
+const TodayCarbs = round(TodayCarbsSum)
+
+// e) Save the result as kcal.json for the widget
+const Result = {
+    "Expenditure": "{Expenditure}",
+    "Active": "{Active}",
+    "Intake": "{Intake}",
+    "Protein": "{Protein}",
+    "Fat": "{Fat}",
+    "Carbs": "{Carbs}",
+    "Weight": "{Weight}",
+    "TodayIntake": "{TodayIntake}",
+    "TodayProtein": "{TodayProtein}",
+    "TodayFat": "{TodayFat}",
+    "TodayCarbs": "{TodayCarbs}"
+}
+saveToScriptable(Result, "kcal.json")

@@ -56,10 +56,22 @@ The widget only gives guidance and is not a substitute for professional nutritio
 
 ### 1. The shortcut "Kcal Deficit"
 
-https://www.icloud.com/shortcuts/e56d64a47d154507ba5fcbac1d2cc75b
-
 This shortcut queries Apple Health, calculates the 7-day averages and saves them as `kcal.json`.
 It needs no AI and runs in a few seconds.
+
+**Install**
+
+1. On your iPhone, open [`shortcuts/Kcal Deficit.shortcut`](shortcuts/Kcal%20Deficit.shortcut) here on GitHub and tap **View raw** (or the download button) to download the file.
+2. Open the downloaded file (in Safari's downloads or in the Files app). The Shortcuts app opens it – tap **Add Shortcut**.
+3. Keep the name **Kcal Deficit**: the meal logging shortcut below runs it by this name.
+4. Open the shortcut once and check the **Save File** action at the end: the destination must be **iCloud Drive › Scriptable**. If it shows a different folder, tap it and choose the Scriptable folder.
+5. Run it once by hand and allow access to Apple Health and to the Scriptable folder when asked.
+
+The source code is [`shortcuts/Kcal Deficit.cherri`](shortcuts/Kcal%20Deficit.cherri), written in [Cherri](https://cherrilang.org), a programming language that compiles to Apple Shortcuts. See [Building the shortcuts from source](#building-the-shortcuts-from-source).
+
+**How it works**
+
+You do not need to build it by hand, but these are the steps it performs (useful if you want to change it or build it yourself in the Shortcuts app).
 
 **a) Fixed day boundaries**
 
@@ -68,9 +80,8 @@ These make the values match the weekly averages in the Health app. The current, 
 | # | Action | Setting | Name the result |
 |---|---|---|---|
 | 1 | `Current Date` | – | |
-| 2 | `Format Date` | Date Format: *Custom*, `yyyy-MM-dd` | |
-| 3 | `Get Dates from Input` | input: formatted date → today at 00:00 | **End** |
-| 4 | `Adjust Date` | *Subtract* 7 *days* from **End** | **Start** |
+| 2 | `Adjust Date` | *Get Start of Day* → today at 00:00 | **End** |
+| 3 | `Adjust Date` | *Subtract* 7 *days* from **End** | **Start** |
 
 **b) One Health query per value**
 
@@ -127,7 +138,7 @@ If you skip this, the widget simply shows no today values.
    The German keys `Bedarf`, `Aktiv`, `Aufnahme`, `Fett`, `Kohlenhydrate`, `Gewicht`, `HeuteAufnahme`, `HeuteProtein`, `HeuteFett` and `HeuteKohlenhydrate` work as well.
 2. **Save File**: destination *iCloud Drive/Scriptable*, subpath `kcal.json`, "Ask Where to Save" off, **Overwrite** on.
 
-**Using more than one device (e.g. iPad):** Shortcuts sync via iCloud, but Health data on an iPad can lag behind or be incomplete. If the shortcut runs there, it overwrites `kcal.json` with wrong values. To prevent this, wrap the *Save File* step in `Get Device Details` (*Device Model*) → `If` *Device Model* *is* *iPhone*. The widget itself works on every device, because it only reads the file.
+**Using more than one device (e.g. iPad):** Shortcuts sync via iCloud, but Health data on an iPad can lag behind or be incomplete. If the shortcut runs there, it overwrites `kcal.json` with wrong values. That is why the shortcut starts with `Get Device Details` (*Device Model*) → `If` *Device Model* *is not* *iPhone* → `Stop This Shortcut`. The widget itself works on every device, because it only reads the file.
 
 Example of a resulting `kcal.json`:
 
@@ -163,37 +174,69 @@ Because only completed days are counted, the averages change once a day (the fir
 
 ## Optional: logging meals with AI ("Nutrition Tracking" shortcut)
 
-https://www.icloud.com/shortcuts/a08a1b4513c341468432e2c9faabbc40
-
-This is the shortcut I use to log meals. You describe a meal in a few words or take a photo of it,
-an AI model estimates calories and macros, and the shortcut saves them to Apple Health.
+This is the shortcut I use to log meals. You describe a meal in a few words, take a photo of it, or both,
+an AI model estimates calories and macros, and after you confirm, the shortcut saves them to Apple Health.
 At the end it runs "Kcal Deficit", so the widget data stays up to date.
 Any other way of logging food to Apple Health (for example a food tracking app) works with the widget as well.
 
+**Install**
+
+1. On your iPhone, open [`shortcuts/Nutrition Tracking.shortcut`](shortcuts/Nutrition%20Tracking.shortcut) here on GitHub and tap **View raw** (or the download button).
+2. Open the downloaded file and tap **Add Shortcut** in the Shortcuts app.
+3. Install "Kcal Deficit" first (see above). If the `Run Shortcut` action at the end shows no shortcut, tap it and choose **Kcal Deficit**.
+4. On the first run, allow access to the camera, Apple Intelligence and Apple Health.
+
+It needs a device with Apple Intelligence (`Use Model` action). The source code is [`shortcuts/Nutrition Tracking.cherri`](shortcuts/Nutrition%20Tracking.cherri).
+
+**How it works**
+
 | # | Action | Setting |
 |---|---|---|
-| 1 | `Choose from Menu` | prompt: *"What did you eat?"*, options **Text** and **Photo** |
-| 2 | ↳ **Text**: `Ask for Input` | input type *Text*, prompt e.g. *"Describe your meal"* |
-| 3 | ↳ **Photo**: `Take Photo` | 1 photo, back camera |
-| 4 | `End Menu` | the result is either the text or the photo (*Menu Result*) |
-| 5 | `Use Model` (Apple Intelligence) | a cloud model that can read images; prompt below, input: *Menu Result* |
+| 1 | `Choose from Menu` | prompt: *"What did you eat?"*, options **Text**, **Photo** and **Text + Photo** |
+| 2 | ↳ **Text**: `Ask for Input` | prompt *"Describe your meal"* → variable **Description** |
+| 3 | ↳ **Photo**: `Take Photo` | 1 photo → variable **Photo** |
+| 4 | ↳ **Text + Photo** | `Take Photo` and `Ask for Input`, both variables |
+| 5 | `Use Model` (Apple Intelligence, Private Cloud Compute) | output type *Dictionary*; prompt below |
 | 6 | `Get Dictionary Value` ×4 | keys `calories`, `fat`, `carbs`, `protein` from the model's *Response* |
-| 7 | `Log Health Sample` ×4 | *Dietary Energy* (kcal), *Total Fat* (g), *Carbohydrates* (g), *Protein* (g), each with the matching dictionary value; date left empty = now |
-| 8 | `Show Result` | e.g. *"Logged: … kcal, fat … g, carbs … g, protein … g"* |
-| 9 | `Run Shortcut` | **Kcal Deficit**, "Show When Run" off |
+| 7 | `Choose from Menu` | shows the estimate, *"Log this meal?"* **Yes** / **No** |
+| 8 | ↳ **Yes**: `Log Health Sample` ×4 | *Dietary Energy* (kcal), *Total Fat* (g), *Carbohydrates* (g), *Protein* (g), each with the matching value; date left empty = now |
+| 9 | ↳ **Yes**: `Run Shortcut` | **Kcal Deficit**, "Show When Run" off |
+| 10 | ↳ **No**: `Show Result`, `Stop This Shortcut` | *"Logging cancelled."* |
 
 Prompt for step 5:
 
 ```text
 Analyze this food input and return ONLY a JSON-formatted answer with the keys
 'calories', 'fat', 'carbs' and 'protein'. The values must be plain numbers
-(calories in kcal, macros in grams). Input: [Menu Result]
+(calories in kcal, macros in grams).
+Input:
+Description: [Description]
+Photo: [Photo]
 ```
 
 Tips:
-- If the model wraps its answer in a code block or adds text, `Get Dictionary Value` fails. Some versions of `Use Model` let you choose *Dictionary* as the output type, which avoids this.
+- The output type *Dictionary* keeps the model from wrapping its answer in a code block or adding text, which would make `Get Dictionary Value` fail.
 - AI estimates from a description or photo can be well off, especially for oil, sauces and portion sizes. Weighing food and using nutrition labels is more accurate.
-- Remove step 8 if you do not want to confirm every entry.
+- Remove the confirmation menu (step 7) if you do not want to confirm every entry.
+
+## Building the shortcuts from source
+
+Both shortcuts are written in [Cherri](https://cherrilang.org) and live in [`shortcuts/`](shortcuts):
+
+| Source | Shortcut |
+|---|---|
+| [`Kcal Deficit.cherri`](shortcuts/Kcal%20Deficit.cherri) | [`Kcal Deficit.shortcut`](shortcuts/Kcal%20Deficit.shortcut) |
+| [`Nutrition Tracking.cherri`](shortcuts/Nutrition%20Tracking.cherri) | [`Nutrition Tracking.shortcut`](shortcuts/Nutrition%20Tracking.shortcut) |
+
+To change a shortcut, edit the `.cherri` file and compile it:
+
+```sh
+cd shortcuts
+cherri "Kcal Deficit.cherri" --share=anyone
+```
+
+iOS only imports signed shortcuts. On a Mac, Cherri signs with the built-in `shortcuts sign` command; on other systems it uses RoutineHub's signing service (HubSign).
+Cherri has no built-in Health actions yet, so `Find Health Samples`, `Log Health Sample` and the Scriptable target folder of `Save File` are declared as custom actions with their raw Shortcuts parameters at the top of each file.
 
 ## Settings in the script
 
